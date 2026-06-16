@@ -45,6 +45,7 @@ log = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 GAMMA_API   = "https://gamma-api.polymarket.com"
 DATA_API    = "https://data-api.polymarket.com"
+DATA_API_V1 = "https://data-api.polymarket.com/v1"
 
 TOP_N       = int(os.getenv("TOP_N_TRADERS", "50"))
 LB_PERIOD   = os.getenv("LEADERBOARD_PERIOD", "WEEK")   # DAY|WEEK|MONTH|ALL
@@ -89,8 +90,10 @@ def get(url: str, params: dict | None = None, retries: int = 3) -> Any:
 # Polymarket API calls
 # ---------------------------------------------------------------------------
 def fetch_leaderboard(category_slug: str, limit: int = TOP_N) -> list[dict]:
-    """Return top traders for a given leaderboard category."""
-    data = get(f"{DATA_API}/leaderboard", {
+    """Return top traders for a given leaderboard category.
+    /v1/leaderboard accepts: limit, category (slug), timePeriod, orderBy
+    """
+    data = get(f"{DATA_API_V1}/leaderboard", {
         "category":   category_slug,
         "timePeriod": LB_PERIOD,
         "orderBy":    "PNL",
@@ -98,7 +101,6 @@ def fetch_leaderboard(category_slug: str, limit: int = TOP_N) -> list[dict]:
     })
     if data is None:
         return []
-    # API may return a list directly or {"data": [...]}
     if isinstance(data, list):
         return data
     return data.get("data", data.get("leaderboard", []))
