@@ -1,0 +1,41 @@
+name: Polymarket Daily Digest
+
+on:
+  # Runs every morning at 7:00 AM UTC (adjust to your timezone)
+  schedule:
+    - cron: "0 7 * * *"
+
+  # Allow manual trigger from the Actions tab
+  workflow_dispatch:
+    inputs:
+      period:
+        description: "Leaderboard period (DAY | WEEK | MONTH | ALL)"
+        required: false
+        default: "WEEK"
+
+jobs:
+  send-digest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run digest
+        env:
+          GMAIL_SENDER:       ${{ secrets.GMAIL_SENDER }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          EMAIL_RECIPIENT:    ${{ secrets.EMAIL_RECIPIENT }}
+          TOP_N_TRADERS:      ${{ vars.TOP_N_TRADERS || '10' }}
+          LEADERBOARD_PERIOD: ${{ github.event.inputs.period || vars.LEADERBOARD_PERIOD || 'WEEK' }}
+        run: python polymarket_digest.py
