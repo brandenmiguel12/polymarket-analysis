@@ -12,6 +12,10 @@ on:
         description: "Leaderboard period (DAY | WEEK | MONTH | ALL)"
         required: false
         default: "WEEK"
+      top_n:
+        description: "Number of top traders per category"
+        required: false
+        default: "50"
 
 jobs:
   send-digest:
@@ -36,6 +40,6 @@ jobs:
           GMAIL_SENDER:       ${{ secrets.GMAIL_SENDER }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
           EMAIL_RECIPIENT:    ${{ secrets.EMAIL_RECIPIENT }}
-          TOP_N_TRADERS:      ${{ vars.TOP_N_TRADERS || '10' }}
+          TOP_N_TRADERS:      ${{ github.event.inputs.top_n || vars.TOP_N_TRADERS || '50' }}
           LEADERBOARD_PERIOD: ${{ github.event.inputs.period || vars.LEADERBOARD_PERIOD || 'WEEK' }}
         run: python polymarket_digest.py

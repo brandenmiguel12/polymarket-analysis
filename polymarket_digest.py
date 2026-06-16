@@ -2,17 +2,21 @@
 """
 Polymarket Daily Digest
 -----------------------
-Pulls top leaderboard trader positions from Polymarket, filters for
-World Cup, Politics, Tech, and Economics markets, synthesises a consensus
-summary, and emails it to the configured recipient every morning.
+Pulls top leaderboard trader positions from Polymarket, synthesises a
+consensus summary across Politics, Economics, Tech, Sports, and Culture,
+and emails it every morning.
+
+Usage:
+  python polymarket_digest.py            # send email (requires creds below)
+  python polymarket_digest.py --print    # print to stdout, no email
 
 Required environment variables (set in .env or GitHub Actions secrets):
-  GMAIL_SENDER      - sender Gmail address
+  GMAIL_SENDER       - sender Gmail address
   GMAIL_APP_PASSWORD - Gmail App Password (not your account password)
-  EMAIL_RECIPIENT   - destination address (defaults to GMAIL_SENDER)
+  EMAIL_RECIPIENT    - destination address (defaults to GMAIL_SENDER)
 
 Optional:
-  TOP_N_TRADERS     - how many top traders to sample per category (default 10)
+  TOP_N_TRADERS      - top traders to sample per category (default 50)
   LEADERBOARD_PERIOD - DAY | WEEK | MONTH | ALL (default WEEK)
 """
 
@@ -42,20 +46,22 @@ log = logging.getLogger(__name__)
 GAMMA_API   = "https://gamma-api.polymarket.com"
 DATA_API    = "https://data-api.polymarket.com"
 
-TOP_N       = int(os.getenv("TOP_N_TRADERS", "10"))
+TOP_N       = int(os.getenv("TOP_N_TRADERS", "50"))
 LB_PERIOD   = os.getenv("LEADERBOARD_PERIOD", "WEEK")   # DAY|WEEK|MONTH|ALL
 MAX_POSITIONS_PER_TRADER = 50
+TOP_MARKETS_PER_CATEGORY = 5
 
 # Categories we care about and how they map to Polymarket's leaderboard slugs
 CATEGORIES = {
     "Politics":   "POLITICS",
-    "Tech":       "TECH",
     "Economics":  "ECONOMICS",
-    "Sports":     "SPORTS",          # World Cup lives here
+    "Tech":       "TECH",
+    "Sports":     "SPORTS",
+    "Culture":    "CULTURE",
 }
 
 # Extra keyword filter for the Sports bucket so we only show World Cup markets
-SPORTS_KEYWORDS = ["world cup", "fifa", "soccer", "football championship"]
+SPORTS_KEYWORDS = []   # no extra filter — show all sports consensus
 
 GMAIL_SENDER   = os.getenv("GMAIL_SENDER", "")
 GMAIL_PASSWORD = os.getenv("GMAIL_APP_PASSWORD", "")
@@ -152,8 +158,8 @@ def gather_category_positions(category_name: str, category_slug: str) -> list[di
         for pos in positions:
             title = pos.get("title") or pos.get("market") or ""
 
-            # For Sports, enforce World Cup keyword filter
-            if category_slug == "SPORTS" and not is_world_cup_market(title):
+            # Optional keyword filter (SPORTS_KEYWORDS empty = accept all)
+            if SPORTS_KEYWORDS and category_slug == "SPORTS" and not is_world_cup_market(title):
                 continue
 
             # Only include positions with meaningful size
@@ -240,7 +246,7 @@ def compute_consensus(positions: list[dict]) -> dict[str, dict]:
 
 
 def top_markets_by_category(
-    all_positions: list[dict], top_n: int = 5
+    all_positions: list[dict], top_n: int = TOP_MARKETS_PER_CATEGORY
 ) -> dict[str, list[dict]]:
     """Group markets by category, sort by total position size, return top N each."""
     consensus = compute_consensus(all_positions)
@@ -268,7 +274,7 @@ def build_html(
     generated_at: str,
     period: str,
 ) -> str:
-    cat_order = ["Politics", "Economics", "Tech", "Sports"]
+    cat_order = ["Politics", "Economics", "Tech", "Sports", "Culture"]
 
     rows_html = ""
     for cat in cat_order:
@@ -276,7 +282,7 @@ def build_html(
         if not mkts:
             continue
 
-        display = cat if cat != "Sports" else "World Cup / Sports"
+        display = cat
         rows_html += f"""
         <tr>
           <td colspan="4" style="background:#1a1a2e;color:#e0e0e0;
@@ -380,13 +386,12 @@ def build_plain(by_category: dict[str, list[dict]], generated_at: str) -> str:
         f"Generated: {generated_at}",
         "=" * 60,
     ]
-    cat_order = ["Politics", "Economics", "Tech", "Sports"]
+    cat_order = ["Politics", "Economics", "Tech", "Sports", "Culture"]
     for cat in cat_order:
         mkts = by_category.get(cat)
         if not mkts:
             continue
-        label = cat if cat != "Sports" else "World Cup / Sports"
-        lines += ["", f"[ {label.upper()} ]", "-" * 40]
+        lines += ["", f"[ {cat.upper()} ]", "-" * 40]
         for m in mkts:
             prob  = m["consensus_prob"]
             lean  = m["trader_lean"]
@@ -428,10 +433,37 @@ def send_email(subject: str, html_body: str, plain_body: str) -> None:
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
+def print_console(by_category: dict[str, list[dict]], ts_str: str) -> None:
+    """Pretty-print consensus table to stdout."""
+    W = 76
+    print("\n" + "═" * W)
+    print(f"  POLYMARKET SMART-MONEY CONSENSUS  │  Top {TOP_N} traders  │  {LB_PERIOD.capitalize()} │  {ts_str}")
+    print("═" * W)
+    for cat in ["Politics", "Economics", "Tech", "Sports", "Culture"]:
+        mkts = by_category.get(cat)
+        if not mkts:
+            continue
+        print(f"\n  ┌─ {cat.upper()} {'─'*(W-7-len(cat))}┐")
+        print(f"  │  {'Market':<52}  {'Consensus':>9}  {'YES/NO':>6}  {'Volume':>8}  │")
+        print(f"  │  {'─'*52}  {'─'*9}  {'─'*6}  {'─'*8}  │")
+        for m in mkts:
+            prob  = m["consensus_prob"]
+            lean  = m["trader_lean"]
+            pct_s = f"YES {prob*100:.1f}%" if lean == "YES" else f"NO  {(1-prob)*100:.1f}%"
+            ratio = f"{m['yes_traders']}/{m['no_traders']}"
+            vol   = f"${m['total_size']:>7,.0f}"
+            title = textwrap.shorten(m["title"], 52, placeholder="…")
+            print(f"  │  {title:<52}  {pct_s:>9}  {ratio:>6}  {vol:>8}  │")
+        print(f"  └{'─'*(W-2)}┘")
+    print("\n" + "═" * W + "\n")
+
+
 def main() -> None:
-    now     = datetime.now(timezone.utc)
-    date_str = now.strftime("%A, %B %-d %Y")   # e.g. "Monday, June 16 2026"
-    ts_str  = now.strftime("%Y-%m-%d %H:%M UTC")
+    print_only = "--print" in sys.argv
+
+    now      = datetime.now(timezone.utc)
+    date_str = now.strftime("%A, %B %-d %Y")
+    ts_str   = now.strftime("%Y-%m-%d %H:%M UTC")
 
     all_positions: list[dict] = []
 
@@ -443,10 +475,17 @@ def main() -> None:
     if not all_positions:
         log.warning("No positions gathered — check API connectivity.")
 
-    by_category = top_markets_by_category(all_positions, top_n=5)
+    by_category = top_markets_by_category(all_positions)
+
+    if print_only:
+        print_console(by_category, ts_str)
+        return
 
     html  = build_html(by_category, ts_str, LB_PERIOD.capitalize())
     plain = build_plain(by_category, ts_str)
+
+    # Always print to stdout too (useful in CI logs)
+    print_console(by_category, ts_str)
 
     subject = f"📊 Polymarket Digest — {date_str}"
     send_email(subject, html, plain)
