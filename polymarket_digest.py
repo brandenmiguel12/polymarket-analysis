@@ -52,13 +52,21 @@ LB_PERIOD   = os.getenv("LEADERBOARD_PERIOD", "WEEK")   # DAY|WEEK|MONTH|ALL
 MAX_POSITIONS_PER_TRADER = 50
 TOP_MARKETS_PER_CATEGORY = 5
 
-# Categories we care about and how they map to Polymarket's leaderboard slugs
-CATEGORIES = {
+# All known categories and their Polymarket leaderboard slugs
+ALL_CATEGORIES = {
     "Politics":   "POLITICS",
     "Economics":  "ECONOMICS",
     "Tech":       "TECH",
     "Sports":     "SPORTS",
     "Culture":    "CULTURE",
+}
+
+# CATEGORIES env var can narrow the run to a subset, e.g. "SPORTS" or "POLITICS,TECH"
+_cat_filter = [s.strip().upper() for s in os.getenv("CATEGORIES", "").split(",") if s.strip()]
+CATEGORIES = {
+    name: slug
+    for name, slug in ALL_CATEGORIES.items()
+    if not _cat_filter or slug in _cat_filter
 }
 
 # Extra keyword filter for the Sports bucket so we only show World Cup markets
@@ -276,7 +284,7 @@ def build_html(
     generated_at: str,
     period: str,
 ) -> str:
-    cat_order = ["Politics", "Economics", "Tech", "Sports", "Culture"]
+    cat_order = [c for c in ["Politics", "Economics", "Tech", "Sports", "Culture"] if c in CATEGORIES]
 
     rows_html = ""
     for cat in cat_order:
@@ -388,7 +396,7 @@ def build_plain(by_category: dict[str, list[dict]], generated_at: str) -> str:
         f"Generated: {generated_at}",
         "=" * 60,
     ]
-    cat_order = ["Politics", "Economics", "Tech", "Sports", "Culture"]
+    cat_order = [c for c in ["Politics", "Economics", "Tech", "Sports", "Culture"] if c in CATEGORIES]
     for cat in cat_order:
         mkts = by_category.get(cat)
         if not mkts:
@@ -441,7 +449,7 @@ def print_console(by_category: dict[str, list[dict]], ts_str: str) -> None:
     print("\n" + "═" * W)
     print(f"  POLYMARKET SMART-MONEY CONSENSUS  │  Top {TOP_N} traders  │  {LB_PERIOD.capitalize()} │  {ts_str}")
     print("═" * W)
-    for cat in ["Politics", "Economics", "Tech", "Sports", "Culture"]:
+    for cat in [c for c in ["Politics", "Economics", "Tech", "Sports", "Culture"] if c in CATEGORIES]:
         mkts = by_category.get(cat)
         if not mkts:
             continue

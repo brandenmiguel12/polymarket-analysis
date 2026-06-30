@@ -16,6 +16,14 @@ on:
         description: "Number of top traders per category"
         required: false
         default: "50"
+      categories:
+        description: "Comma-separated categories to include (e.g. SPORTS or POLITICS,TECH). Leave blank for all five."
+        required: false
+        default: ""
+      email_recipient:
+        description: "Override the destination email address for this run only"
+        required: false
+        default: ""
 
 jobs:
   send-digest:
@@ -39,7 +47,8 @@ jobs:
         env:
           GMAIL_SENDER:       ${{ secrets.GMAIL_SENDER }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
-          EMAIL_RECIPIENT:    ${{ secrets.EMAIL_RECIPIENT }}
+          EMAIL_RECIPIENT:    ${{ github.event.inputs.email_recipient || secrets.EMAIL_RECIPIENT }}
           TOP_N_TRADERS:      ${{ github.event.inputs.top_n || vars.TOP_N_TRADERS || '50' }}
           LEADERBOARD_PERIOD: ${{ github.event.inputs.period || vars.LEADERBOARD_PERIOD || 'WEEK' }}
+          CATEGORIES:         ${{ github.event.inputs.categories }}
         run: python polymarket_digest.py
