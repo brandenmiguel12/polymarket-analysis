@@ -1,0 +1,22 @@
+{
+  "name": "polymarket-analysis",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {},
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/brandenmiguel12/polymarket-analysis.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/brandenmiguel12/polymarket-analysis/issues"
+  },
+  "homepage": "https://github.com/brandenmiguel12/polymarket-analysis#readme",
+  "devDependencies": {
+    "@playwright/test": "^1.63.0",
+    "@types/node": "^26.6.3"
+  }
+}
